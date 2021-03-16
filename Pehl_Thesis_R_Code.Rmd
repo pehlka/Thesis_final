@@ -1,0 +1,308 @@
+---
+title: "Pehl_Thesis_R_Code"
+author: "Kayla Pehl"
+date: "3/16/2021"
+output: html_document
+---
+
+```{r}
+#Loading necessary packages
+library(ggplot2)
+library(lme4)
+library(doBy)
+library(car)
+library(emmeans)
+library(nlme)
+library(lmtest)
+```
+
+```{r}
+#Set working directory
+setwd("~/College of Charleston/Thesis/R_Data")
+
+#Importing data
+field_transect_condensed <- read.csv("field_transect_condensed.csv")
+  #habitat assessment data - broken into debris, mixed and sand to match lab data
+field_obs_sub <- read.csv("field_obs_sub.csv")
+  #habitat assessment data - obstacles - broken into substrate type where the obstacles were found
+cover <- read.csv("cover.csv")
+  #habitat assessment data - cover
+RR_demo2 <- read.csv("RR_demo2.csv")
+  #demographics for each lizard
+lab_data2 <- read.csv("lab_data2.csv")
+  #lab racetrack data 
+lab_data2_omit <- lab_data2[!is.na(lab_data2$bipedal_percent), ]
+  #lab racetrack data - omitted non-bipedal rows
+fieldspeed <-  read.csv("fieldspeed.csv")
+  #field data 
+fieldspeed_jan <- read.csv("fieldspeed_jan.csv")
+  #field data (rows without substrate & speed omitted)
+fieldspeed_reduced_debris <- read.csv("fieldspeed_reduced_debris.csv")
+  #field data (rows without substrate & speed were omitted as well as ground clutter marked as debris)
+fieldspeed_substrate_percent <- read.csv("fieldspeed_substrate_percent.csv")
+  #field data with substrate percentages
+```
+
+```{r}
+#Additional Data - Habitat assessment transect GPS points
+
+##all latitude points are East and all longitude points are North
+transect_GPS_coordinates <- read.csv("transect_GPS_coordinates.csv")
+```
+
+
+Question 1: Do "A. sexlineata" move through their habitat randomly or non-randomly?
+
+```{r}
+#bar plot of habitat assessment substrate totals condensed
+ggplot(field_transect_condensed, aes(x=substrate, y=distance_m)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(x = "Substrate", y = "Distance (m)") +
+  geom_text(aes(x=substrate, y = distance_m, label = percent_type, vjust = 1), size=4, 
+            color = "black") +
+  scale_x_discrete(labels = c("Debris", "Mixed", "Sand")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(color = "black")) +
+  theme(axis.line.x = element_line(color = "black", size = 0.5),
+        axis.line.y = element_line(color = "black", size = 0.5),
+        axis.text = element_text(face = "bold"),
+        plot.title = element_text(size = 15))
+```
+
+```{r}
+#bar plot of field data substrate totals
+ggplot(fieldspeed_substrate_percent, aes(x=Substrate.Type, y=Distance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(x = "Substrate", y = "Distance Traveled (m)") +
+  geom_text(aes(x=Substrate.Type, y = Distance, label = PercentSubstrate, vjust = 1), size=4, 
+            color = "black") +
+  scale_x_discrete(labels = c("Debris", "Mixed", "Sand")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(color = "black")) +
+  theme(axis.line.x = element_line(color = "black", size = 0.5),
+        axis.line.y = element_line(color = "black", size = 0.5),
+        axis.text = element_text(face = "bold"))
+```
+
+```{r}
+#bar plot of cover
+ggplot(cover, aes(x=substrate, y=distance_m)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(x = "Substrate", y = "Distance Cover (m)") +
+  geom_text(aes(x=substrate, y = distance_m, label = percent, vjust = 1), size=4, 
+            color = "black") +
+  scale_x_discrete(labels = c("Debris", "Mixed", "Sand")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(color = "black")) +
+  theme(axis.line.x = element_line(color = "black", size = 0.5),
+        axis.line.y = element_line(color = "black", size = 0.5),
+        axis.text = element_text(face = "bold"))
+```
+
+```{r}
+#Chi Square test 
+env <- matrix(c(1899.5, 1.05, 1307.95, 16.94, 637.45, 34.928), ncol = 2, byrow = TRUE)
+colnames(env) <- c("random", "used")
+rownames(env) <- c("debris", "mixed", "sand")
+env
+chisq.test(env)  
+```
+
+
+Question 2: How does "available" habitat affect "A. sexlineata" locomotion?
+
+> Testing effect of sex, SVL, and tail length 
+
+>> Lab Data
+
+```{r}
+#Velocity 
+vel_sex <- lm(log10(peak_v) ~ sex, data = RR_demo2)   
+anova(vel_sex)  
+
+vel_svl <- lm(log10(peak_v) ~ svl, data = RR_demo2)   
+anova(vel_svl)   
+
+vel_tl <- lm(log10(peak_v) ~ tail_length, data = RR_demo2)   
+anova(vel_tl) 
+```
+
+```{r}
+#Acceleration
+acc_sex <- lm(log10(peak_acc) ~ sex, data = RR_demo2)   
+anova(acc_sex)   
+
+acc_svl <- lm(log10(peak_acc) ~ svl, data = RR_demo2)   
+anova(acc_svl) 
+
+acc_tl <- lm(log10(peak_acc) ~ tail_length, data = RR_demo2)   
+anova(acc_tl)   
+```
+
+>> Field Data
+
+```{r}
+speed_sex <- lm(log10(Speed) ~ Sex, data = fieldspeed_jan, na.action=na.omit)
+anova(speed_sex)  
+
+clutter_sex <- lm(log10(NumberClutter+1) ~ Sex, data = fieldspeed, na.action = na.omit)
+anova(clutter_sex)  
+```
+
+> Models
+
+>> Lab Data
+
+```{r}
+#Velocity ~ Substrate 
+lme.log.side.vmax.sub <- lme(log10(peak_v) ~ substrate_type*biped_combined, random = ~1|ID, data = lab_data2)
+anova(lme.log.side.vmax.sub, type="marginal")  
+shapiro.test(residuals(lme.log.side.vmax.sub))  
+performance::r2(lme.log.side.vmax.sub)  
+lme.log.side.vmax.sub.tukey <- emmeans(lme.log.side.vmax.sub, pairwise ~ substrate_type*biped_combined, adjust="tukey", data=lab_data2)
+lme.log.side.vmax.sub.tukey  
+
+ggplot(lab_data2, aes(y=peak_v, x=substrate_type, fill = biped_combined)) +
+  geom_boxplot(outlier.shape = NA) + 
+  scale_fill_discrete(labels = c("bipedal", "quadrupedal")) +
+  labs(x = "Substrate", y = "Peak Velocity (m/s)") +
+  scale_x_discrete(labels = c("Debris", "Sand", "Mixed")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(color = "black")) +
+  theme(axis.line.x = element_line(color = "black", size = 0.5),
+        axis.line.y = element_line(color = "black", size = 0.5),
+        axis.text = element_text(face = "bold"),
+        legend.title = element_blank())
+```
+
+```{r}
+#Acceleration ~ Substrate
+lme.log.side.amax.sub <- lme(log10(side_amax) ~ substrate_type*biped_combined, random = ~1|ID, data = lab_data2)
+anova(lme.log.side.amax.sub, type="marginal")  
+shapiro.test(residuals(lme.log.side.amax.sub))  
+performance::r2(lme.log.side.amax.sub)  
+lme.log.side.amax.tukey2 <- emmeans(lme.log.side.amax.sub, pairwise ~ substrate_type*biped_combined, adjust="tukey", data=lab_data2)
+lme.log.side.amax.tukey2   
+
+ggplot(lab_data2, aes(y=side_amax, x=substrate_type, fill = biped_combined)) +
+  geom_boxplot(outlier.shape = NA) + 
+  scale_fill_discrete(labels = c("bipedal", "quadrupedal")) +
+  labs(x = "Substrate", y = bquote('Peak Acceleration' ~ (m/s^2))) +
+  scale_x_discrete(labels = c("Debris", "Sand", "Mixed")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(color = "black")) +
+  theme(axis.line.x = element_line(color = "black", size = 0.5),
+        axis.line.y = element_line(color = "black", size = 0.5),
+        axis.text = element_text(face = "bold"),
+        legend.title = element_blank())
+```
+
+```{r}
+#Percent Bipedal ~ Substrate
+lme.biped.sub <- lme(sqrt(bipedal_percent) ~ substrate_type, random = ~1|ID, data = lab_data2_omit)
+anova(lme.biped.sub, type="marginal")  
+shapiro.test(residuals(lme.biped.sub))  
+performance::r2(lme.biped.sub)  
+lme.biped.sub.tukey <- emmeans(lme.biped.sub, pairwise ~ substrate_type, adjust="tukey", data=lab_data2_omit)
+lme.biped.sub.tukey  
+
+ggplot(lab_data2_omit, aes(y=bipedal_percent, x=substrate_type, fill = substrate_type)) +
+  geom_boxplot(outlier.shape = NA) + 
+  scale_fill_manual(values = c("lightskyblue2", "lightblue2", "steelblue")) +
+  labs(x = "Substrate", y = "Percent Bipedal") +
+  scale_x_discrete(labels = c("Debris", "Sand", "Mixed")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(color = "black")) +
+  theme(axis.line.x = element_line(color = "black", size = 0.5),
+        axis.line.y = element_line(color = "black", size = 0.5),
+        axis.text = element_text(face = "bold"))
+```
+
+```{r}
+#Bipedalism's effect on peak velocity 
+peakv.biped <- lme(log10(peak_v+1) ~ log10(bipedal_percent+1), random = ~1|ID, data = lab_data2_omit)
+anova(peakv.biped)  
+hist(residuals(peakv.biped))
+shapiro.test(residuals(peakv.biped))  
+summary(peakv.biped)
+performance::r2(peakv.biped)  
+
+ggplot(lab_data2_omit, aes(bipedal_percent, peak_v)) +
+  geom_point() + 
+  geom_smooth(method = 'lm') +
+  labs(x = "Percent Bipedal", y = "Peak Velocity (m/s)") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(color = "black"),
+        axis.text = element_text(face = "bold"))
+```
+
+```{r}
+#Bipedalism's effect on side acceleration
+side.amax.biped <- lme(log10(side_amax+1) ~ log10(bipedal_percent+1) + sex, random = ~1|ID, data = lab_data2_omit)
+anova(side.amax.biped)  
+hist(residuals(side.amax.biped))
+shapiro.test(residuals(side.amax.biped))  
+summary(side.amax.biped)
+performance::r2(side.amax.biped)  
+
+ggplot(lab_data2_omit, aes(bipedal_percent, side_amax)) +
+  geom_point() + 
+  geom_smooth(method = 'lm') +
+  labs(x = "Percent Bipedal", y = bquote('Peak Acceleration' ~ (m/s^2))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(color = "black"),
+        axis.text = element_text(face = "bold"))
+```
+
+```{r}
+#Bipedal vs. quadrupedal percentages from side and top cameras
+
+table(lab_data2$bipedal_quad_side)
+table(lab_data2$bipedal_quad_top)
+```
+
+>> Field Data
+
+```{r}
+#Speed ~ Substrate
+mcelroy_speed_sub_lm <- lm(log10(Speed+1) ~ Substrate.Type, data = fieldspeed_jan, na.action=na.omit)
+anova(mcelroy_speed_sub_lm)   
+mcelroy_speed_sub_lm.tukey <- emmeans(mcelroy_speed_sub_lm, pairwise ~ Substrate.Type, adjust="tukey", data=fieldspeed_jan)
+mcelroy_speed_sub_lm.tukey
+shapiro.test(residuals(mcelroy_speed_sub_lm))  
+
+ggplot(fieldspeed_jan, aes(x = reorder(Substrate.Type, Speed, FUN = median), y = Speed, fill = Substrate.Type)) + 
+  geom_boxplot() +
+  scale_fill_manual(values = c("lightskyblue2", "steelblue", "lightblue2")) +
+  labs(x = "Substrate", y = "Speed (m/s)") +
+  scale_x_discrete(labels = c("Debris", "Sand", "Mixed")) +
+  theme(panel.background = element_blank()) +
+  theme(axis.line.x = element_line(color = "black", size = 0.5),
+        axis.line.y = element_line(color = "black", size = 0.5),
+        axis.text = element_text(face = "bold"))
+```
+
+```{r}
+#Speed ~ Number Clutter
+mcelroy_speed_clutter_lm <- lm(log10(Speed+1) ~ log10(NumberClutter+1), data = fieldspeed_reduced_debris, na.action = na.omit)
+anova(mcelroy_speed_clutter_lm)  
+shapiro.test(residuals(mcelroy_speed_clutter_lm))   
+
+ggplot(fieldspeed_reduced_debris, aes(log(NumberClutter+1), log(Speed+1)))+
+  geom_point(aes(color = Substrate.Type)) + 
+  geom_smooth(method = 'lm') +
+  labs(x = "log10(Ground Clutter Crossed)", y = "log10(Speed) (m/s)") +
+  scale_color_discrete(name = "Substrate Type", labels = c("Mixed", "Sand")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        axis.line = element_line(color = "black"),
+        axis.text = element_text(face = "bold"))
+```
